@@ -6,7 +6,7 @@ import { get, useForm } from 'react-hook-form'
 import { useMutation } from '@apollo/client';
 import { ADD_POST, ADD_SUBREDDIT } from '../graphql/mutations';
 import client from '../apollo-client'
-import { GET_SUBREDDIT_BY_TOPIC } from '../graphql/queries';
+import { GET_ALL_POSTS, GET_SUBREDDIT_BY_TOPIC } from '../graphql/queries';
 import toast from 'react-hot-toast';
 
 interface FormData {
@@ -16,12 +16,18 @@ interface FormData {
   subreddit: string
 }
 
-function PostBox() {
+type Props = {
+  subreddit?: string
+}
+
+function PostBox({ subreddit }: Props) {
 
   const { data: session } = useSession();
-  const [ addPost ] = useMutation(ADD_POST);
-  const [ addSubreddit ] = useMutation(ADD_SUBREDDIT);
-  const [ imageBoxOpen, setImageBoxOpen ] = useState(false);
+  const [addPost] = useMutation(ADD_POST, {
+    refetchQueries: [GET_ALL_POSTS, 'getPostList']
+  });
+  const [addSubreddit] = useMutation(ADD_SUBREDDIT);
+  const [imageBoxOpen, setImageBoxOpen] = useState(false);
 
   const {
     register,
@@ -36,11 +42,11 @@ function PostBox() {
     const notification = toast.loading('Creating new post...');
 
     try {
-
+      // Query for the subreddit topic...
       const { data: { getSubredditListByTopic } } = await client.query({
         query: GET_SUBREDDIT_BY_TOPIC,
         variables: {
-          topic: formData.subreddit
+          topic: subreddit || formData.subreddit
         }
       })
 
@@ -50,7 +56,7 @@ function PostBox() {
         // create subreddit...
         console.log('Subbreddit is new -> create a NEW subreddit!');
 
-        const { data : { insertSubreddit: newSubreddit } } = await addSubreddit({
+        const { data: { insertSubreddit: newSubreddit } } = await addSubreddit({
           variables: {
             topic: formData.subreddit
           }
@@ -60,7 +66,7 @@ function PostBox() {
 
         const image = formData.postImage || '';
 
-        const {data: { insertPost: newPost }} = await addPost({
+        const { data: { insertPost: newPost } } = await addPost({
           variables: {
             body: formData.postBody,
             image: image,
@@ -75,10 +81,10 @@ function PostBox() {
       } else {
         // use existings subreddit...
         console.log('Using existing subreddit');
-        
+
         const image = formData.postImage || '';
 
-        const { data: { insertPost: newPost}} = await addPost({
+        const { data: { insertPost: newPost } } = await addPost({
           variables: {
             body: formData.postBody,
             image: image,
@@ -99,9 +105,9 @@ function PostBox() {
         id: notification,
       })
 
-    } catch(err) {
+    } catch (err) {
       console.log(err);
-      toast.error("Whoops something went wrong", {
+      toast.error("Whoops something went wrong (check console.log...)", {
         id: notification,
       })
     }
@@ -109,8 +115,8 @@ function PostBox() {
 
   return (
     <form
-      onSubmit={onSubmit} 
-      action="" 
+      onSubmit={onSubmit}
+      action=""
       className='sticky-0 z-50 top-16 border 
       border-gray-300 bg-white p-2'
     >
@@ -119,17 +125,20 @@ function PostBox() {
         <Avatar />
 
         <input
-          {...register('postTitle', {required: true, maxLength: 20})} 
+          {...register('postTitle', { required: true, maxLength: 20 })}
           type="text"
           disabled={!session}
           placeholder={
-            session ? 'Create a post by entering a title!' : 'Sign in to post!'
-          } 
+            session
+              ? subreddit
+                ? `Create a post in r/${subreddit}`
+                : 'Create a post by entering a title!'
+              : 'Sign in to post!'
+          }
           className='bg-gray-50 p-2 pl-5 outline-none flex-1 rounded-md'
         />
-        <PhotographIcon onClick={() => setImageBoxOpen(!imageBoxOpen)} className={`h-6 text-gray-300 cursor-pointer ${
-            imageBoxOpen && 'text-blue-300'
-          }`} 
+        <PhotographIcon onClick={() => setImageBoxOpen(!imageBoxOpen)} className={`h-6 text-gray-300 cursor-pointer ${imageBoxOpen && 'text-blue-300'
+          }`}
         />
         <LinkIcon className='h-6 text-gray-300' />
       </div>
@@ -140,29 +149,35 @@ function PostBox() {
             <p className="min-w-[90px]">Body:</p>
             <input
               {...register('postBody')}
-              className='m-2 flex-1 bg-blue-50 p-2 outline-none' 
-              type="text" 
+              className='m-2 flex-1 bg-blue-50 p-2 outline-none'
+              type="text"
               placeholder='Text (optional)' />
           </div>
           {/* Subreddit */}
-          <div className="flex items-center px-2">
-            <p className="min-w-[90px]">Subreddit:</p>
-            <input
-              {...register('subreddit')}
-              className='m-2 flex-1 bg-blue-50 p-2 outline-none' 
-              type="text" 
-              placeholder='i.e. reactjs' />
-          </div>
+          {
+            !subreddit && (
+              <div className="flex items-center px-2">
+                <p className="min-w-[90px]">Subreddit:</p>
+                <input
+                  {...register('subreddit')}
+                  className='m-2 flex-1 bg-blue-50 p-2 outline-none'
+                  type="text"
+                  placeholder='i.e. reactjs' 
+                />
+              </div>
+            )
+          }
+
           {/* Image */}
           {imageBoxOpen && (
             <div className="flex items-center px-2">
-            <p className="min-w-[90px]">Image URL:</p>
-            <input
-              {...register('postImage')}
-              className='m-2 flex-1 bg-blue-50 p-2 outline-none' 
-              type="text" 
-              placeholder='Optional...' />
-          </div>
+              <p className="min-w-[90px]">Image URL:</p>
+              <input
+                {...register('postImage')}
+                className='m-2 flex-1 bg-blue-50 p-2 outline-none'
+                type="text"
+                placeholder='Optional...' />
+            </div>
           )}
         </div>
       )}
